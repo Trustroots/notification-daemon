@@ -1,0 +1,11 @@
+services:
+  notifi_test:
+    build: .
+    environment:
+      - STRFRY_URL=wss://relay.trustroots.org
+      - RABBITMQ_URL=amqp://insecure:insecure@172.20.0.1:5672
+      - RABBITMQ_QUEUE=notifications
+
+networks:
+  nostr_network:
+    external: true
