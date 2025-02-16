@@ -23,10 +23,13 @@ nak_event12345:
 nak_eventother:
 	nak event -c hello $(STRFRY) -k 666
 
-nak_filterrando:
+nak_filter_121314:
 	nak event -k $(KIND) -c  '{"filters": [{"kind": [10111]}]}' $(STRFRY) --sec 12
 	nak event -k $(KIND) -c  '{"filters": [{"kind": [10222]}]}' $(STRFRY) --sec 13
 	nak event -k $(KIND) -c  '{"filters": [{"kind": [10333]}]}' $(STRFRY) --sec 14
+
+nak_filterrand:
+	nak event -k $(KIND) -c  '{"filters": [{"kind": [10333]}]}' $(STRFRY) --sec $(shell echo $$RANDOM)
 
 nak_filter12345:
 	#nak event -k $(KIND) -c '{ kinds: [0] }'  $(STRFRY) --sec 11

@@ -15,6 +15,44 @@ const (
 	KindAppData = 10395
 )
 
+// FilterManager keeps track of all filters, ensuring only latest message per pubkey
+type FilterManager struct {
+	filtersByPubkey map[string][]nostr.Filter
+}
+
+func NewFilterManager() *FilterManager {
+	return &FilterManager{
+		filtersByPubkey: make(map[string][]nostr.Filter),
+	}
+}
+
+func (fm *FilterManager) UpdateFilters(event nostr.Event) {
+	if event.Kind != KindAppData {
+		return
+	}
+
+	newFilters := parseStoredFilters([]nostr.Event{event})
+
+	_, exists := fm.filtersByPubkey[event.PubKey]
+	if exists {
+		log.Printf("🔄 Updating filters from existing pubkey %s", event.PubKey)
+	} else {
+		log.Printf("👤 Received filters from new pubkey %s", event.PubKey)
+	}
+
+	fm.filtersByPubkey[event.PubKey] = newFilters
+	log.Printf("  Now has %d filters", len(newFilters))
+}
+
+func (fm *FilterManager) GetAllFilters() []nostr.Filter {
+	var allFilters []nostr.Filter
+	for pubkey, filters := range fm.filtersByPubkey {
+		log.Printf("  📋 Pubkey %s has %d active filters", pubkey, len(filters))
+		allFilters = append(allFilters, filters...)
+	}
+	return allFilters
+}
+
 func processMessage(msg string) {
 	log.Printf("Processing message: %s", msg)
 }
@@ -111,7 +149,7 @@ func setupRabbitMQ(ch *amqp.Channel, queueName string) error {
 	return nil
 }
 
-func readRabbitMQ(rabbitURL string, queueName string, filters []nostr.Filter) error {
+func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager) error {
 	conn, err := amqp.Dial(rabbitURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to RabbitMQ: %v", err)
@@ -142,11 +180,13 @@ func readRabbitMQ(rabbitURL string, queueName string, filters []nostr.Filter) er
 	}
 
 	log.Printf("🔍 Loaded filters:")
-	for i, filter := range filters {
-		log.Printf("  Filter %d: %+v", i, filter)
+	for pubkey, filters := range fm.filtersByPubkey {
+		log.Printf("  Pubkey %s has filters: %+v", pubkey, filters)
 	}
 
-	log.Printf("Starting to consume messages from queue: %s with %d filters", queueName, len(filters))
+	log.Printf("Starting to consume messages from queue: %s with %d filters",
+		queueName,
+		len(fm.GetAllFilters()))
 	for msg := range msgs {
 		// Print raw message for debugging
 		log.Printf("📥 Received message:\n%s", string(msg.Body))
@@ -166,6 +206,16 @@ func readRabbitMQ(rabbitURL string, queueName string, filters []nostr.Filter) er
 		}
 
 		event := wrapper.Event
+
+		// Handle new filter registration
+		if event.Kind == KindAppData {
+			log.Printf("📥 Received new filter message from pubkey: %s", event.PubKey)
+			fm.UpdateFilters(event)
+			msg.Ack(false)
+			continue
+		}
+
+		// Regular event processing
 		log.Printf("📋 Parsed Nostr Event:\n"+
 			"  ID: %s\n"+
 			"  Kind: %d\n"+
@@ -180,16 +230,16 @@ func readRabbitMQ(rabbitURL string, queueName string, filters []nostr.Filter) er
 			event.PubKey,
 			wrapper.SourceInfo)
 
-		// Check all filters
+		// Check all current filters
 		matches := 0
-		for i, filter := range filters {
-			log.Printf("  🔍 Checking against filter %d: %+v", i, filter)
+		for _, filter := range fm.GetAllFilters() {
+			log.Printf("  🔍 Checking against filter: %+v", filter)
 			if filter.Matches(&event) {
-				log.Printf("  ✅ Filter %d matched event kind %d", i, event.Kind)
+				log.Printf("  ✅ Filter matched event kind %d", event.Kind)
 				handleMatchedEvent(event)
 				matches++
 			} else {
-				log.Printf("  ❌ Filter %d did not match event kind %d", i, event.Kind)
+				log.Printf("  ❌ Filter did not match event kind %d", event.Kind)
 			}
 		}
 
@@ -247,18 +297,28 @@ func parseStoredFilters(events []nostr.Event) []nostr.Filter {
 }
 
 func main() {
+	filterManager := NewFilterManager()
+
 	strfryHost := os.Getenv("STRFRY_URL")
 	if strfryHost == "" {
 		strfryHost = "ws://localhost:7777"
 	}
 
+	// Load initial filters from strfry
 	events, err := readStrfryEvents(strfryHost)
 	if err != nil {
 		log.Fatal("Failed to read from strfry:", err)
 	}
 
-	filters := parseStoredFilters(events)
-	log.Printf("Loaded %d filters from strfry", len(filters))
+	// Initialize the map with existing filters
+	for _, event := range events {
+		if event.Kind == KindAppData {
+			filterManager.UpdateFilters(event)
+		}
+	}
+
+	log.Printf("✅ Loaded initial filters from strfry: %d pubkeys",
+		len(filterManager.filtersByPubkey))
 
 	printEvents(events)
 
@@ -271,7 +331,7 @@ func main() {
 		queueName = "nostr_events"
 	}
 
-	if err := readRabbitMQ(rabbitURL, queueName, filters); err != nil {
+	if err := readRabbitMQ(rabbitURL, queueName, filterManager); err != nil {
 		log.Fatal("Failed to read from RabbitMQ:", err)
 	}
 }
