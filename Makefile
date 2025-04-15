@@ -24,16 +24,20 @@ nak_eventother:
 	nak event -c hello $(STRFRY) -k 666
 
 nak_filter_121314:
-	nak event -k $(KIND) -c  '{"filters": [{"kind": [10111]}]}' $(STRFRY) --sec 12
-	nak event -k $(KIND) -c  '{"filters": [{"kind": [10222]}]}' $(STRFRY) --sec 13
-	nak event -k $(KIND) -c  '{"filters": [{"kind": [10333]}]}' $(STRFRY) --sec 14
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10111]}]}' $(STRFRY) --sec 12
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10222]}]}' $(STRFRY) --sec 13
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10333]}]}' $(STRFRY) --sec 14
 
 nak_filterrand:
-	nak event -k $(KIND) -c  '{"filters": [{"kind": [10333]}]}' $(STRFRY) --sec $(shell echo $$RANDOM)
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10333]}]}' $(STRFRY) --sec $(shell echo $$RANDOM)
 
 nak_filter12345:
 	#nak event -k $(KIND) -c '{ kinds: [0] }'  $(STRFRY) --sec 11
-	nak event -k $(KIND) -c  '{"filters": [{"kind": [12345]}]}' $(STRFRY) --sec 11
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [12345]}]}' $(STRFRY) --sec 11
+
+
+nak_filter_and_token:
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10222]}], "token": ["fooo", "bar", "foobar"]}' $(STRFRY) --sec 13
 
 nak_filter_some:
 	make send12345

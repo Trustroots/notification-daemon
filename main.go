@@ -26,12 +26,24 @@ func NewFilterManager() *FilterManager {
 	}
 }
 
+type PushKey string
+
+type PushManager struct {
+	pushkeysByPubkey map[string][]PushKey
+}
+
+func NewPushManager() *PushManager {
+	return &PushManager{
+		pushkeysByPubkey: make(map[string][]PushKey),
+	}
+}
+
 func (fm *FilterManager) UpdateFilters(event nostr.Event) {
 	if event.Kind != KindAppData {
 		return
 	}
 
-	newFilters := parseStoredFilters([]nostr.Event{event})
+	newFilters := parseFilters([]nostr.Event{event})
 
 	_, exists := fm.filtersByPubkey[event.PubKey]
 	if exists {
@@ -42,6 +54,24 @@ func (fm *FilterManager) UpdateFilters(event nostr.Event) {
 
 	fm.filtersByPubkey[event.PubKey] = newFilters
 	log.Printf("  Now has %d filters", len(newFilters))
+}
+
+func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
+	if event.Kind != KindAppData {
+		return
+	}
+
+	newPushkeys := parsePushkeys([]nostr.Event{event})
+
+	_, exist := pm.pushkeysByPubkey[event.PubKey]
+	if exist {
+		log.Printf("🔄 Updating pushkeys from existing pubkey %s", event.PubKey)
+	} else {
+		log.Printf("👤 Received pushkeys from new pubkey %s", event.PubKey)
+	}
+
+	pm.pushkeysByPubkey[event.PubKey] = newPushkeys
+	log.Printf("  Now has %d pushkeys", len(newPushkeys))
 }
 
 func (fm *FilterManager) GetAllFilters() []nostr.Filter {
@@ -187,6 +217,7 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager) error {
 	log.Printf("Starting to consume messages from queue: %s with %d filters",
 		queueName,
 		len(fm.GetAllFilters()))
+
 	for msg := range msgs {
 		// Print raw message for debugging
 		log.Printf("📥 Received message:\n%s", string(msg.Body))
@@ -255,7 +286,8 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager) error {
 	return nil
 }
 
-func parseStoredFilters(events []nostr.Event) []nostr.Filter {
+
+func parseFilters(events []nostr.Event) []nostr.Filter {
 	var filters []nostr.Filter
 
 	for i, event := range events {
@@ -263,29 +295,33 @@ func parseStoredFilters(events []nostr.Event) []nostr.Filter {
 			continue
 		}
 
-		// Parse the content which contains the filter definition
 		var content struct {
-			Filters []struct {
-				Kind []int `json:"kind"`
-				// Add other filter fields as needed
-			} `json:"filters"`
-		}
+            Filters []json.RawMessage `json:"filters"`
+        }
+        
+        if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
+            log.Printf("❌ Failed to parse filter content from event %d: %v", i, err)
+            continue
+        }
+		//log.Printf("ULTRA MEGA DEBUG: %s ", content)
 
-		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
-			log.Printf("❌ Failed to parse filter content from event %d: %v", i, err)
-			continue
-		}
-
-		// Convert each filter definition to nostr.Filter
-		for _, f := range content.Filters {
-			filter := nostr.Filter{
-				Kinds: f.Kind,
-				// Set other filter fields as needed
-			}
-			log.Printf("📋 Parsed filter from event %d: %+v", i, filter)
-			filters = append(filters, filter)
-		}
-	}
+		log.Printf("------------------------------------------------------------------------")
+		for _, rawFilter := range content.Filters {
+			//log.Printf("ULTRA DEBUG: Raw filter JSON: %s", string(rawFilter))
+            var filter nostr.Filter
+            if err := json.Unmarshal(rawFilter, &filter); err != nil {
+                log.Printf("❌ Failed to parse individual filter: %v", err)
+                continue
+            } 
+			//else {
+				//log.Printf("ULTRA DEBUG: filter:: %+v ", filter)
+				//log.Printf("ULTRA DEBUG: Raw filter JSON: %s", string(rawFilter))
+			//}
+            
+            log.Printf("📋 Parsed filter from event %d: %+v", i, filter)
+            filters = append(filters, filter)
+        }
+    }
 
 	if len(filters) == 0 {
 		log.Printf("⚠️ Warning: No valid filters parsed from %d events", len(events))
@@ -294,6 +330,22 @@ func parseStoredFilters(events []nostr.Event) []nostr.Filter {
 	}
 
 	return filters
+}
+
+func parsePushkeys(events []nostr.Event) []PushKey {
+	var pushkeys []PushKey
+	for i, event := range events {
+		if event.Kind != KindAppData { continue}
+		log.Printf("i:%d",i)
+	}
+
+	if len(pushkeys) == 0 {
+		log.Printf("⚠️ Warning: No valid pushkeys parsed from %d events", len(pushkeys))
+	} else {
+		log.Printf("✅ Successfully parsed %d pushkeys", len(pushkeys))
+	}
+
+	return pushkeys
 }
 
 func main() {
