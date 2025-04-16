@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip04"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -243,7 +244,7 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 				continue
 			}
 
-			decryptedContent, err := decryptContent(event.Content, privateKey)
+			decryptedContent, err := decryptContent(event.Content, event.PubKey)
 			if err != nil {
 				log.Printf("Decrytption failed for message: %s", event.ID)
 				log.Printf("err: %v", err)
@@ -388,7 +389,7 @@ func GetTagValues(e nostr.Event, name string) []string {
 
 func isEncryptedAndIsForMe(event nostr.Event) bool {
 	// check if has p tag
-	// check if P tag is for me
+	// check if p tag is for me
 	// check if content has "?iv="
 	// check if first part is base64
 
@@ -398,24 +399,38 @@ func isEncryptedAndIsForMe(event nostr.Event) bool {
 	// should be save, no?
 	vals := GetTagValues(event, "p")[0]
 	if len(vals) == 0 {
+		log.Printf("no p tag")
 		return false
 	}
 	if vals != keys.publicKey {
+		log.Printf("first p tag is not for me")
 		return false
 	}
-	if !strings.Containes(event.Content, "?iv=") {
+	if !strings.Contains(event.Content, "?iv=") {
+		log.Printf("no iv marker ..")
 		return false
 	}
 	// fuck it, lets not check if both splat parts, iv and chipertet are base64, it will fail just fine during encryption
+	// if strings.split("","?iv=") ... .. .
 
 	return true
 }
 
-func decryptContent(content string, privatKey string) string {
+func decryptContent(content string, sharedKey string) (string, error) {
 	log.Printf("trying to decrupt cotent: %s", content)
-	log.Printf("With Privatekey: %s", privatKey)
+	log.Printf("With Privatekey: %s", keys.privateKey)
 
-	return content
+	// this we should / clould do, only once for every pk/sk pair, to save time!
+	// but it probbbably just does not matter at the end of the day if we do end up making this 100x slower..
+	shared, _ := nip04.ComputeSharedSecret(keys.privateKey, sharedKey)
+
+	// plaintext, _ := Decrypt(ciphertext, shared)
+	plain, err := nip04.Decrypt("ddd", shared)
+	if err != nil {
+		log.Printf("TBD!!!")
+	}
+
+	return plain, nil
 }
 
 func derivePublickey(privateKey string) string {

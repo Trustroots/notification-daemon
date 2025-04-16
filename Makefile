@@ -1,11 +1,17 @@
 .PHONY: run build shell
 
+include privatekey
+export
+
 STRFRY = wss://relay.trustroots.org
 KIND = 10395
 
 forward_ports:
 	# forward AMQP and rabbit-web-UI from tr to docker and localhost respectivly
 	ssh -N -L 8888:0.0.0.0:15672 -L 0.0.0.0:5672:157.90.239.153:5672 tr
+
+test_privatekey_export:
+	echo $$PRIVATEKEY
 
 ###############################
 ### some nak testing things ###
