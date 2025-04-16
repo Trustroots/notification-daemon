@@ -26,15 +26,15 @@ func NewFilterManager() *FilterManager {
 	}
 }
 
-type PushKey string
+type Pushtoken string
 
 type PushManager struct {
-	pushkeysByPubkey map[string][]PushKey
+	pushkeysByPubkey map[string][]Pushtoken
 }
 
 func NewPushManager() *PushManager {
 	return &PushManager{
-		pushkeysByPubkey: make(map[string][]PushKey),
+		pushkeysByPubkey: make(map[string][]Pushtoken),
 	}
 }
 
@@ -61,7 +61,7 @@ func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
 		return
 	}
 
-	newPushkeys := parsePushkeys([]nostr.Event{event})
+	newPushtokens := parsePushtokens([]nostr.Event{event})
 
 	_, exist := pm.pushkeysByPubkey[event.PubKey]
 	if exist {
@@ -70,8 +70,8 @@ func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
 		log.Printf("👤 Received pushkeys from new pubkey %s", event.PubKey)
 	}
 
-	pm.pushkeysByPubkey[event.PubKey] = newPushkeys
-	log.Printf("  Now has %d pushkeys", len(newPushkeys))
+	pm.pushkeysByPubkey[event.PubKey] = newPushtokens
+	log.Printf("  Now has %d pushkeys", len(newPushtokens))
 }
 
 func (fm *FilterManager) GetAllFilters() []nostr.Filter {
@@ -303,20 +303,12 @@ func parseFilters(events []nostr.Event) []nostr.Filter {
             log.Printf("❌ Failed to parse filter content from event %d: %v", i, err)
             continue
         }
-		//log.Printf("ULTRA MEGA DEBUG: %s ", content)
-
-		log.Printf("------------------------------------------------------------------------")
 		for _, rawFilter := range content.Filters {
-			//log.Printf("ULTRA DEBUG: Raw filter JSON: %s", string(rawFilter))
             var filter nostr.Filter
             if err := json.Unmarshal(rawFilter, &filter); err != nil {
                 log.Printf("❌ Failed to parse individual filter: %v", err)
                 continue
             } 
-			//else {
-				//log.Printf("ULTRA DEBUG: filter:: %+v ", filter)
-				//log.Printf("ULTRA DEBUG: Raw filter JSON: %s", string(rawFilter))
-			//}
             
             log.Printf("📋 Parsed filter from event %d: %+v", i, filter)
             filters = append(filters, filter)
@@ -332,31 +324,52 @@ func parseFilters(events []nostr.Event) []nostr.Filter {
 	return filters
 }
 
-func parsePushkeys(events []nostr.Event) []PushKey {
-	var pushkeys []PushKey
+func parsePushtokens(events []nostr.Event) []Pushtoken {
+	var pushtokens []Pushtoken
+
 	for i, event := range events {
-		if event.Kind != KindAppData { continue}
-		log.Printf("i:%d",i)
-	}
+		if event.Kind != KindAppData {
+			continue
+		}
 
-	if len(pushkeys) == 0 {
-		log.Printf("⚠️ Warning: No valid pushkeys parsed from %d events", len(pushkeys))
+		var content struct {
+            Pushtokens []json.RawMessage `json:"pushtokens"`
+        }
+        
+        if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
+            log.Printf("❌ Failed to parse pushtoken content from event %d: %v", i, err)
+            continue
+        }
+		for _, rawPushtoken := range content.Pushtokens {
+            var pushtoken Pushtoken
+            if err := json.Unmarshal(rawPushtoken, &pushtoken); err != nil {
+                log.Printf("❌ Failed to parse individual pushtoken: %v", err)
+                continue
+            } 
+            
+            log.Printf("📋 Parsed pushtoken from event %d: %+v", i, pushtoken)
+            pushtokens = append(pushtokens, pushtoken)
+        }
+    }
+
+	if len(pushtokens) == 0 {
+		log.Printf("⚠️ Warning: No valid pushtokens parsed from %d events", len(events))
 	} else {
-		log.Printf("✅ Successfully parsed %d pushkeys", len(pushkeys))
+		log.Printf("✅ Successfully parsed %d pushtokens", len(pushtokens))
 	}
 
-	return pushkeys
+	return pushtokens
 }
 
 func main() {
 	filterManager := NewFilterManager()
+	pushManager := NewPushManager() 
 
 	strfryHost := os.Getenv("STRFRY_URL")
 	if strfryHost == "" {
 		strfryHost = "ws://localhost:7777"
 	}
 
-	// Load initial filters from strfry
 	events, err := readStrfryEvents(strfryHost)
 	if err != nil {
 		log.Fatal("Failed to read from strfry:", err)
@@ -366,10 +379,11 @@ func main() {
 	for _, event := range events {
 		if event.Kind == KindAppData {
 			filterManager.UpdateFilters(event)
+			pushManager.UpdatePushkeys(event)
 		}
 	}
 
-	log.Printf("✅ Loaded initial filters from strfry: %d pubkeys",
+	log.Printf("✅ Loaded initial filters and pushtoken from strfry: %d pubkeys",
 		len(filterManager.filtersByPubkey))
 
 	printEvents(events)
