@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -63,7 +64,6 @@ func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
 
 	newPushtokens := parsePushtokens([]nostr.Event{event})
 
-
 	//log.Printf("super duper debuggggggg, %s", newPushtokens[])
 	_, exist := pm.pushkeysByPubkey[event.PubKey]
 	if exist {
@@ -83,10 +83,6 @@ func (fm *FilterManager) GetAllFilters() []nostr.Filter {
 		allFilters = append(allFilters, filters...)
 	}
 	return allFilters
-}
-
-func processMessage(msg string) {
-	log.Printf("Processing message: %s", msg)
 }
 
 func readStrfryEvents(strfryHost string) ([]nostr.Event, error) {
@@ -243,6 +239,19 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 		if event.Kind == KindAppData {
 			log.Printf("📥 Received new appData message from pubkey: %s", event.PubKey)
 
+			if isEncryptedAndIsForMe(event) {
+				continue
+			}
+
+			decryptedContent, err := decryptContent(event.Content, privateKey)
+			if err != nil {
+				log.Printf("Decrytption failed for message: %s", event.ID)
+				log.Printf("err: %v", err)
+				continue
+			}
+
+			event.Content = decryptedContent
+
 			log.Printf("🔄🔍 Updating filters")
 			fm.UpdateFilters(event)
 
@@ -293,7 +302,6 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 	return nil
 }
 
-
 func parseFilters(events []nostr.Event) []nostr.Filter {
 	var filters []nostr.Filter
 
@@ -303,24 +311,24 @@ func parseFilters(events []nostr.Event) []nostr.Filter {
 		}
 
 		var content struct {
-            Filters []json.RawMessage `json:"filters"`
-        }
-        
-        if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
-            log.Printf("❌ Failed to parse filter content from event %d: %v", i, err)
-            continue
-        }
+			Filters []json.RawMessage `json:"filters"`
+		}
+
+		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
+			log.Printf("❌ Failed to parse filter content from event %d: %v", i, err)
+			continue
+		}
 		for _, rawFilter := range content.Filters {
-            var filter nostr.Filter
-            if err := json.Unmarshal(rawFilter, &filter); err != nil {
-                log.Printf("❌ Failed to parse individual filter: %v", err)
-                continue
-            } 
-            
-            log.Printf("📋 Parsed filter from event %d: %+v", i, filter)
-            filters = append(filters, filter)
-        }
-    }
+			var filter nostr.Filter
+			if err := json.Unmarshal(rawFilter, &filter); err != nil {
+				log.Printf("❌ Failed to parse individual filter: %v", err)
+				continue
+			}
+
+			log.Printf("📋 Parsed filter from event %d: %+v", i, filter)
+			filters = append(filters, filter)
+		}
+	}
 
 	if len(filters) == 0 {
 		log.Printf("⚠️ Warning: No valid filters parsed from %d events", len(events))
@@ -340,24 +348,24 @@ func parsePushtokens(events []nostr.Event) []Pushtoken {
 		}
 
 		var content struct {
-            Pushtokens []json.RawMessage `json:"tokens"`
-        }
-        
-        if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
-            log.Printf("❌ Failed to parse pushtoken content from event %d: %v", i, err)
-            continue
-        }
+			Pushtokens []json.RawMessage `json:"tokens"`
+		}
+
+		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
+			log.Printf("❌ Failed to parse pushtoken content from event %d: %v", i, err)
+			continue
+		}
 		for _, rawPushtoken := range content.Pushtokens {
-            var pushtoken Pushtoken
-            if err := json.Unmarshal(rawPushtoken, &pushtoken); err != nil {
-                log.Printf("❌ Failed to parse individual pushtoken: %v", err)
-                continue
-            } 
-            
-            log.Printf("📋 Parsed pushtoken from event %d: %+v", i, pushtoken)
-            pushtokens = append(pushtokens, pushtoken)
-        }
-    }
+			var pushtoken Pushtoken
+			if err := json.Unmarshal(rawPushtoken, &pushtoken); err != nil {
+				log.Printf("❌ Failed to parse individual pushtoken: %v", err)
+				continue
+			}
+
+			log.Printf("📋 Parsed pushtoken from event %d: %+v", i, pushtoken)
+			pushtokens = append(pushtokens, pushtoken)
+		}
+	}
 
 	if len(pushtokens) == 0 {
 		log.Printf("⚠️ Warning: No valid pushtokens parsed from %d events", len(events))
@@ -368,9 +376,81 @@ func parsePushtokens(events []nostr.Event) []Pushtoken {
 	return pushtokens
 }
 
+func GetTagValues(e nostr.Event, name string) []string {
+	var res []string
+	for _, tag := range e.Tags {
+		if len(tag) > 1 && tag[0] == name {
+			res = append(res, tag[1])
+		}
+	}
+	return res
+}
+
+func isEncryptedAndIsForMe(event nostr.Event) bool {
+	// check if has p tag
+	// check if P tag is for me
+	// check if content has "?iv="
+	// check if first part is base64
+
+	// here we get the first one, and only the first one.
+	// the assumtion being that it does not make sense to,
+	// for a entrypted message have multiple p adressent
+	// should be save, no?
+	vals := GetTagValues(event, "p")[0]
+	if len(vals) == 0 {
+		return false
+	}
+	if vals != keys.publicKey {
+		return false
+	}
+	if !strings.Containes(event.Content, "?iv=") {
+		return false
+	}
+	// fuck it, lets not check if both splat parts, iv and chipertet are base64, it will fail just fine during encryption
+
+	return true
+}
+
+func decryptContent(content string, privatKey string) string {
+	log.Printf("trying to decrupt cotent: %s", content)
+	log.Printf("With Privatekey: %s", privatKey)
+
+	return content
+}
+
+func derivePublickey(privateKey string) string {
+	publicKey, err := nostr.GetPublicKey(privateKey)
+	if err != nil {
+		log.Fatalf("Failed to derive public key from private key. %v", err)
+	}
+	return publicKey
+}
+
+type KeyMaterial struct {
+	privateKey string
+	publicKey  string
+}
+
+func setupKeys(privateKeyEnv string) {
+	privateKey := privateKeyEnv // just to mark that it coudl be empty ..
+	if privateKey == "" {
+		log.Fatal("PRIVATKEY not found in env. Stopping")
+	}
+	publicKey := derivePublickey(privateKey)
+
+	keys = &KeyMaterial{
+		privateKey: privateKey,
+		publicKey:  publicKey,
+	}
+
+}
+
+var keys *KeyMaterial
+
 func main() {
 	filterManager := NewFilterManager()
-	pushManager := NewPushManager() 
+	pushManager := NewPushManager()
+	setupKeys(os.Getenv("PRIVATEKEY"))
 
 	strfryHost := os.Getenv("STRFRY_URL")
 	if strfryHost == "" {
