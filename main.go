@@ -63,6 +63,8 @@ func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
 
 	newPushtokens := parsePushtokens([]nostr.Event{event})
 
+
+	//log.Printf("super duper debuggggggg, %s", newPushtokens[])
 	_, exist := pm.pushkeysByPubkey[event.PubKey]
 	if exist {
 		log.Printf("🔄 Updating pushkeys from existing pubkey %s", event.PubKey)
@@ -179,7 +181,7 @@ func setupRabbitMQ(ch *amqp.Channel, queueName string) error {
 	return nil
 }
 
-func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager) error {
+func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *PushManager) error {
 	conn, err := amqp.Dial(rabbitURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to RabbitMQ: %v", err)
@@ -211,7 +213,7 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager) error {
 
 	log.Printf("🔍 Loaded filters:")
 	for pubkey, filters := range fm.filtersByPubkey {
-		log.Printf("  Pubkey %s has filters: %+v", pubkey, filters)
+		log.Printf("  Pubkey %s has filters: %+v", pubkey, filters) // add pushtoken
 	}
 
 	log.Printf("Starting to consume messages from queue: %s with %d filters",
@@ -238,10 +240,15 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager) error {
 
 		event := wrapper.Event
 
-		// Handle new filter registration
 		if event.Kind == KindAppData {
-			log.Printf("📥 Received new filter message from pubkey: %s", event.PubKey)
+			log.Printf("📥 Received new appData message from pubkey: %s", event.PubKey)
+
+			log.Printf("🔄🔍 Updating filters")
 			fm.UpdateFilters(event)
+
+			log.Printf("🔄📱 Updating pushkeys")
+			pm.UpdatePushkeys(event)
+
 			msg.Ack(false)
 			continue
 		}
@@ -333,7 +340,7 @@ func parsePushtokens(events []nostr.Event) []Pushtoken {
 		}
 
 		var content struct {
-            Pushtokens []json.RawMessage `json:"pushtokens"`
+            Pushtokens []json.RawMessage `json:"tokens"`
         }
         
         if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
@@ -397,7 +404,7 @@ func main() {
 		queueName = "nostr_events"
 	}
 
-	if err := readRabbitMQ(rabbitURL, queueName, filterManager); err != nil {
+	if err := readRabbitMQ(rabbitURL, queueName, filterManager, pushManager); err != nil {
 		log.Fatal("Failed to read from RabbitMQ:", err)
 	}
 }

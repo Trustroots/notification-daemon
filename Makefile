@@ -37,7 +37,7 @@ nak_filter12345:
 
 
 nak_filter_and_token:
-	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10222]}], "token": ["fooo", "bar", "foobar"]}' $(STRFRY) --sec 13
+	nak event -k $(KIND) -c  '{"filters": [{"kinds": [10222]}], "tokens": ["fooo", "bar", "foobar"]}' $(STRFRY) --sec 13
 
 nak_filter_some:
 	make send12345
