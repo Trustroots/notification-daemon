@@ -45,6 +45,11 @@ nak_filter_some:
 	make send12345
 	make sendother
 
+### nip04 shit
+nip04:
+	#nak req -k 10395 -a 864c1494cd39a106743fe7426daa20b7a39c3c83da281b1e8d98789210ffe46f wss://relay.trustroots.org
+	cat nip04.json| nak event wss://relay.trustroots.org/
+
 ####################
 #### end of nak ####
 ####################
