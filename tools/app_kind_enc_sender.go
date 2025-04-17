@@ -12,6 +12,16 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip04"
 )
 
+func genKeyPair() (privateKey, publicKey string) {
+	privateKey = nostr.GeneratePrivateKey()
+	publicKey, err := nostr.GetPublicKey(privateKey)
+	if err != nil {
+		log.Fatalf("Failed to derive public key form private key. %v", err)
+	}
+
+	return privateKey, publicKey
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("expected 'send' or 'derive' subcommand")
@@ -19,6 +29,44 @@ func main() {
 	}
 
 	switch os.Args[1] {
+
+	case "test":
+		_ = flag.NewFlagSet("test", flag.ExitOnError)
+
+		log.Printf("Generating Prive / Public key par for sender")
+		senderPrivateKey, senderPublicKey := genKeyPair()
+		log.Printf("SenderPrivateKey:%s", senderPrivateKey)
+		log.Printf("SenderPubliceKey:%s", senderPublicKey)
+
+		log.Printf("Generating Prive / Public key par for reciver")
+		recieverPrivateKey, recieverPublicKey := genKeyPair()
+		log.Printf("recieverPrivateKey:%s", recieverPrivateKey)
+		log.Printf("recieverPubliceKey:%s", recieverPublicKey)
+
+		secretMsg := "this is our verry secret message"
+
+		sharedSecret, err := nip04.ComputeSharedSecret(recieverPublicKey, senderPrivateKey)
+		if err != nil {
+			log.Fatalf("Computation of shared secret failed. %v", err)
+		}
+		cipherText, err := nip04.Encrypt(secretMsg, sharedSecret)
+		if err != nil {
+			log.Fatalf("Encryption failed. %v", err)
+		}
+
+		log.Printf("cipherText:%s", cipherText)
+		log.Println("Trying to decryt")
+
+		decrypted, err := nip04.Decrypt(cipherText, sharedSecret)
+		if err != nil {
+			log.Printf("DEcryption failed. %v", err)
+		}
+
+		log.Printf("decrypted: %s", decrypted)
+
+		//otherSahredSecret, _ := nip04.ComputeSharedSecret(senderPublicKey, recieverPrivateKey)
+		//log.Printf("%x, %x", []byte(otherSahredSecret), []byte(sharedSecret))
+
 	case "derive":
 		deriveCmd := flag.NewFlagSet("derive", flag.ExitOnError)
 		privateKey := deriveCmd.String("private-key", "", "Private key (hex)")
