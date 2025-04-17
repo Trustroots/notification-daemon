@@ -240,9 +240,11 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 		if event.Kind == KindAppData {
 			log.Printf("📥 Received new appData message from pubkey: %s", event.PubKey)
 
-			if isEncryptedAndIsForMe(event) {
+			if !isEncryptedAndIsForMe(event) {
 				continue
 			}
+
+			log.Printf("is for me..")
 
 			decryptedContent, err := decryptContent(event.Content, event.PubKey)
 			if err != nil {
@@ -397,13 +399,13 @@ func isEncryptedAndIsForMe(event nostr.Event) bool {
 	// the assumtion being that it does not make sense to,
 	// for a entrypted message have multiple p adressent
 	// should be save, no?
-	vals := GetTagValues(event, "p")[0]
+	vals := GetTagValues(event, "p")
 	if len(vals) == 0 {
 		log.Printf("no p tag")
 		return false
 	}
-	if vals != keys.publicKey {
-		log.Printf("first p tag is not for me")
+	if vals[0] != keys.publicKey {
+		log.Printf("first p tag is not for me (was: %s)", vals[0])
 		return false
 	}
 	if !strings.Contains(event.Content, "?iv=") {
@@ -416,18 +418,24 @@ func isEncryptedAndIsForMe(event nostr.Event) bool {
 	return true
 }
 
-func decryptContent(content string, sharedKey string) (string, error) {
-	log.Printf("trying to decrupt cotent: %s", content)
+func decryptContent(content string, senderPublicKey string) (string, error) {
+	log.Printf("trying to decrypt cotent: %s", content)
 	log.Printf("With Privatekey: %s", keys.privateKey)
 
 	// this we should / clould do, only once for every pk/sk pair, to save time!
 	// but it probbbably just does not matter at the end of the day if we do end up making this 100x slower..
-	shared, _ := nip04.ComputeSharedSecret(keys.privateKey, sharedKey)
+	shared, err := nip04.ComputeSharedSecret(senderPublicKey, keys.privateKey)
+	//shared, err := nip04.ComputeSharedSecret(keys.privateKey, sharedKey)
+	if err != nil {
+		log.Printf("Failed to compute shared secret. %v", err)
+	}
 
 	// plaintext, _ := Decrypt(ciphertext, shared)
-	plain, err := nip04.Decrypt("ddd", shared)
+	plain, err := nip04.Decrypt(content, shared)
+	log.Printf("plain: %s, content: %s", plain, content)
 	if err != nil {
 		log.Printf("TBD!!!")
+		log.Printf("%v", err)
 	}
 
 	return plain, nil
@@ -449,9 +457,11 @@ type KeyMaterial struct {
 func setupKeys(privateKeyEnv string) {
 	privateKey := privateKeyEnv // just to mark that it coudl be empty ..
 	if privateKey == "" {
-		log.Fatal("PRIVATKEY not found in env. Stopping")
+		log.Fatal("PRIVATEKEY not found in env. Stopping")
 	}
 	publicKey := derivePublickey(privateKey)
+
+	log.Printf("derived publickey: %s", publicKey)
 
 	keys = &KeyMaterial{
 		privateKey: privateKey,

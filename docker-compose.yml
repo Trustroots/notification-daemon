@@ -5,6 +5,7 @@ services:
       - STRFRY_URL=wss://relay.trustroots.org
       - RABBITMQ_URL=amqp://insecure:insecure@172.20.0.1:5672
       - RABBITMQ_QUEUE=notifications
+      - PRIVATEKEY=${PRIVATEKEY}
 
 networks:
   nostr_network:

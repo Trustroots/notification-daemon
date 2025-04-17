@@ -61,7 +61,7 @@ nip04:
 ####################
 
 run:
-	docker compose up --build
+	PRIVATEKEY=$$PRIVATEKEY docker compose up --build
 
 build:
 	docker compose build
