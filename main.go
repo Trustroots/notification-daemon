@@ -7,11 +7,24 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/9ssi7/exponent"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip04"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+var c *exponent.Client
+
+func setupPush(expoAccessTokenEnv string) {
+	if expoAccessTokenEnv == "" {
+		log.Fatal("EXPOACCESSTOKEN not found in env. exiting.")
+	}
+	expoAccessToken := expoAccessTokenEnv
+	c = exponent.NewClient(exponent.WithAccessToken(expoAccessToken))
+}
 
 const (
 	KindAppData = 10395
@@ -130,8 +143,53 @@ func printEvents(events []nostr.Event) {
 	log.Println("=== End of events ===")
 }
 
-func handleMatchedEvent(event nostr.Event) {
-	log.Printf("✅ Matched event %s! Would process this...", event.ID)
+func sendPushToMany(tokenStrs []Pushtoken) {
+	var tokens []*exponent.Token
+	for _, s := range tokenStrs {
+		tokens = append(tokens, exponent.MustParseToken(string(s)))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	msgs := []*exponent.Message{}
+
+	for _, tkn := range tokens {
+		msgs = append(msgs, &exponent.Message{
+			To:       []*exponent.Token{tkn},
+			Body:     "Group push",
+			Title:    "Broadcast",
+			Priority: exponent.DefaultPriority,
+		})
+	}
+
+	res, err := c.Publish(ctx, msgs)
+
+	if err != nil {
+		log.Println("Error:", err.Error())
+		return
+	}
+
+	for i, r := range res {
+		if r.IsOk() {
+			println("Sent to", tokenStrs[i])
+		} else {
+			println("Failed to ", tokenStrs[i]+":")
+		}
+	}
+}
+
+func handleMatchedEvent(event nostr.Event, pushToken []Pushtoken) {
+	log.Printf("✅ Matched event %s. Processing. Sending Push to %s et. al.", event.ID, pushToken)
+
+	if pushToken == nil {
+		log.Printf("No pushtoken for publik key found. done.")
+		return
+	}
+	log.Printf("number of push tokens for this msg %d", len(pushToken))
+
+	sendPushToMany(pushToken)
+
 }
 
 func setupRabbitMQ(ch *amqp.Channel, queueName string) error {
@@ -286,7 +344,10 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 			log.Printf("  🔍 Checking against filter: %+v", filter)
 			if filter.Matches(&event) {
 				log.Printf("  ✅ Filter matched event kind %d", event.Kind)
-				handleMatchedEvent(event)
+				tokens := pm.pushkeysByPubkey[event.PubKey]
+				handleMatchedEvent(event, tokens)
+				//handleMatchedEvent(event)
+
 				matches++
 			} else {
 				log.Printf("  ❌ Filter did not match event kind %d", event.Kind)
@@ -473,6 +534,8 @@ func setupKeys(privateKeyEnv string) {
 var keys *KeyMaterial
 
 func main() {
+	setupPush(os.Getenv("EXPOACCESSTOKEN"))
+
 	filterManager := NewFilterManager()
 	pushManager := NewPushManager()
 	setupKeys(os.Getenv("PRIVATEKEY"))

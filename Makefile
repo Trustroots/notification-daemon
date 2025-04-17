@@ -18,7 +18,7 @@ test_privatekey_export:
 ###############################
 
 nak_send:
-	nak event -c hello $(STRFRY)
+	nak event -c hello $(STRFRY) -k 10333
 
 nak_req:
 	nak req --limit 50000 --paginate --paginate-interval 1s $(STRFRY)
@@ -61,7 +61,7 @@ nip04:
 ####################
 
 run:
-	PRIVATEKEY=$$PRIVATEKEY docker compose up --build
+	PRIVATEKEY=$$PRIVATEKEY EXPOACCESSTOKEN=$$EXPOACCESSTOKEN docker compose up --build
 
 build:
 	docker compose build
