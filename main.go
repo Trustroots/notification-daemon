@@ -221,10 +221,10 @@ func sendPushToMany(tokenStrs []Pushtoken) {
 	}
 }
 
-func handleMatchedEvent(event nostr.Event, pubkey string) {
+func handleMatchedEvent(pm PushManager, pubkey string) {
 
 	pushToken := pm.pushkeysByPubkey[pubkey]
-	log.Printf("✅ Matched event %s. Processing. Sending Push to %s for pubkey %s", event.ID, pushToken, pubkey)
+	log.Printf("✅ Sending Push to %s for pubkey %s", pushToken, pubkey)
 
 	if pushToken == nil {
 		log.Printf("No pushtoken for public key found. done.")
@@ -386,17 +386,18 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 		// Check all current filters
 		matches := 0
 		//for _, filter := range fm.GetAllFilters() {
-		for filter, pubkey := range fm.GetAllFiltersPubKeyPairs() {
-			log.Printf("🔍 Checking against filter: %+v", filter)
-			if filter.Matches(&event) {
+		//for filter, pubkey := range fm.GetAllFiltersPubKeyPairs() {
+		for _, pair := range fm.GetAllFiltersPubKeyPairs() {
+			log.Printf("🔍 Checking against filter: %+v", pair.filter)
+			if pair.filter.Matches(&event) {
 				log.Printf("✅ Filter matched event kind %d", event.Kind)
 				//tokens := pm.pushkeysByPubkey[event.PubKey]
 				//handleMatchedEvent(event)
-				log.Printf("filter: %v. pubkey: %s, event: %v", filter, pubkey, event)
+				log.Printf("filter: %v. pubkey: %s, event: %v", pair.filter, pair.pubkey, event)
 				//handleMatchedEvent(event, tokens)
 				//handleMatchedEvent(event)
 
-				handleMatchedEvent(event, pubkey)
+				handleMatchedEvent(*pm, pair.pubkey)
 
 				matches++
 			} else {
