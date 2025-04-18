@@ -38,8 +38,8 @@ The service operates in two phases:
 
 The service handles two kinds of messages:
 
-- Subscription (Nip4, Kind 10395, _AppData_)
-- Message
+- Subscription (Nip4 enrypted but Kind 10395, _AppData_)
+- Message/Any events
 
 as defined in https://github.com/Trustroots/nostroots/blob/main/nr-common/src/10395.schema.ts
 
@@ -50,6 +50,6 @@ Client notifies server for which events they/a pubkey wants notifications for an
 
 10395: replaces older messages with the same ID.
 
-#### Message
+#### Message/Any event
 
 Any Nostr event. If it matches a stored subscription filter, push notifications are sent to all relevant (e.g. subscribed) devices.
