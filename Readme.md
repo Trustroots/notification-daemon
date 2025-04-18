@@ -3,6 +3,7 @@
 This service processes Nostr events to enable push notifications based on Kind 10395 filters.
 
 ### Architecture
+```
 ┌──────────────────────────┐       ┌──────────┐     ┌───────────────┐
 │ nostr relay / strfry     ├───────┤AppData as├───► │               │
 │                          │       │kind 10395│     │               │
@@ -24,7 +25,7 @@ This service processes Nostr events to enable push notifications based on Kind 1
 │Devices /│◄─┘└─►│Devices /│                                         
 │iOS      │      │Android  │                                         
 └─────────┘      └─────────┘                                         
-
+```
 ### Overview
 
 The service operates in two phases:
