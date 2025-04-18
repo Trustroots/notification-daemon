@@ -383,22 +383,12 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 			event.PubKey,
 			wrapper.SourceInfo)
 
-		// Check all current filters
 		matches := 0
-		//for _, filter := range fm.GetAllFilters() {
-		//for filter, pubkey := range fm.GetAllFiltersPubKeyPairs() {
 		for _, pair := range fm.GetAllFiltersPubKeyPairs() {
 			log.Printf("🔍 Checking against filter: %+v", pair.filter)
 			if pair.filter.Matches(&event) {
-				log.Printf("✅ Filter matched event kind %d", event.Kind)
-				//tokens := pm.pushkeysByPubkey[event.PubKey]
-				//handleMatchedEvent(event)
-				log.Printf("filter: %v. pubkey: %s, event: %v", pair.filter, pair.pubkey, event)
-				//handleMatchedEvent(event, tokens)
-				//handleMatchedEvent(event)
-
+				log.Printf("✅ Filter matched event kind %d filter: %v. pubkey: %s, event: %v", event.Kind, pair.filter, pair.pubkey, event)
 				handleMatchedEvent(*pm, pair.pubkey)
-
 				matches++
 			} else {
 				log.Printf("❌ Filter did not match event kind %d", event.Kind)
