@@ -2,15 +2,38 @@
 
 This service processes Nostr events to enable push notifications based on Kind 10395 filters.
 
-## Overview
+### Architecture
+┌──────────────────────────┐       ┌──────────┐     ┌───────────────┐
+│ nostr relay / strfry     ├───────┤AppData as├───► │               │
+│                          │       │kind 10395│     │               │
+└──────────────────────────┘       │   or     │     │ notification- │
+┌──────────────────────────┐       │Events as │     │ daemon        │
+│ message queue / rabbitmq ├───────┤Any Kind  ├───► │               │
+│                          │       │          │     │               │
+└──────────────────────────┘       └──────────┘     │               │
+┌──────────────────────────┐       ┌──────────┐     │               │
+│ SDK's Notification hub / │◄──────┤REST PUSH ├─────┤               │
+│       Expo Go            │       │   API    │     │               │
+└────────────┬┬────────────┘       └──────────┘     └───────────────┘
+             ││                                                      
+     ┌───────┴┴────────┐                                             
+     │PUSH Notification│                                             
+     └───────┬┬────────┘                                             
+┌─────────┐  ││  ┌─────────┐                                         
+│Mobile - │  ││  │Mobile - │                                         
+│Devices /│◄─┘└─►│Devices /│                                         
+│iOS      │      │Android  │                                         
+└─────────┘      └─────────┘                                         
+
+### Overview
 
 The service operates in two phases:
 
-### Startup Phase
+#### Startup Phase
 
 Scans recent historical Nostr events via strfry and processes them.
 
-### Normal Operation Phase
+#### Normal Operation Phase
 
 Listens to a RabbitMQ queue (fed by strfry) for real-time event processing.
 
