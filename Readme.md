@@ -1,6 +1,8 @@
 # Nostr Push Notification Service
 
-This service processes Nostr events to enable push notifications based on Kind 10395 filters.
+Privacy-preserving push notifications for Nostroots using Nostr filters.
+Mobile clients send AppMessage events (Kind 10395) with filters and Expo push tokens.
+The notification daemon uses the Expo Go service to push notifications to all subscribed (filtered) devices when matching events arrive.
 
 ### Architecture
 ```
@@ -29,14 +31,8 @@ This service processes Nostr events to enable push notifications based on Kind 1
 ### Overview
 
 The service operates in two phases:
-
-#### Startup Phase
-
-Scans recent historical Nostr events via strfry and processes them.
-
-#### Normal Operation Phase
-
-Listens to a RabbitMQ queue (fed by strfry) for real-time event processing.
+* in Startup Phase, all historical Nostr events are read from strfry and processes.
+* Normal Operation Phase: Listens to a RabbitMQ queue (fed by strfry) for real-time event processing.
 
 ### Message Types
 
