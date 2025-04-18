@@ -30,26 +30,32 @@ const (
 	KindAppData = 10395
 )
 
-// FilterManager keeps track of all filters, ensuring only latest message per pubkey
+type FilterMap map[string][]nostr.Filter
+
 type FilterManager struct {
-	filtersByPubkey map[string][]nostr.Filter
+	//filtersByPubkey map[string][]nostr.Filter
+	filtersByPubkey FilterMap
 }
 
 func NewFilterManager() *FilterManager {
 	return &FilterManager{
-		filtersByPubkey: make(map[string][]nostr.Filter),
+		//filtersByPubkey: make(map[string][]nostr.Filter),
+		filtersByPubkey: make(FilterMap),
 	}
 }
 
 type Pushtoken string
+type PushMap map[string][]Pushtoken
 
 type PushManager struct {
-	pushkeysByPubkey map[string][]Pushtoken
+	//pushkeysByPubkey map[string][]Pushtoken
+	pushkeysByPubkey PushMap
 }
 
 func NewPushManager() *PushManager {
 	return &PushManager{
-		pushkeysByPubkey: make(map[string][]Pushtoken),
+		pushkeysByPubkey: make(PushMap),
+		//pushkeysByPubkey: make(map[string][]Pushtoken),
 	}
 }
 
@@ -61,14 +67,15 @@ func (fm *FilterManager) UpdateFilters(event nostr.Event) {
 	newFilters := parseFilters([]nostr.Event{event})
 
 	_, exists := fm.filtersByPubkey[event.PubKey]
+	fm.filtersByPubkey[event.PubKey] = newFilters
+	count := len(newFilters)
+
 	if exists {
-		log.Printf("🔄 Updating filters from existing pubkey %s", event.PubKey)
+		log.Printf("🔄 Updating filters from existing pubkey %s. Count: %d.", event.PubKey, count)
 	} else {
-		log.Printf("👤 Received filters from new pubkey %s", event.PubKey)
+		log.Printf("👤 Received filters from new pubkey %s. Count: %d.", event.PubKey, count)
 	}
 
-	fm.filtersByPubkey[event.PubKey] = newFilters
-	log.Printf("  Now has %d filters", len(newFilters))
 }
 
 func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
@@ -78,25 +85,49 @@ func (pm *PushManager) UpdatePushkeys(event nostr.Event) {
 
 	newPushtokens := parsePushtokens([]nostr.Event{event})
 
-	//log.Printf("super duper debuggggggg, %s", newPushtokens[])
-	_, exist := pm.pushkeysByPubkey[event.PubKey]
-	if exist {
-		log.Printf("🔄 Updating pushkeys from existing pubkey %s", event.PubKey)
-	} else {
-		log.Printf("👤 Received pushkeys from new pubkey %s", event.PubKey)
+	//log.Print("dddddddddddd", newPushtokens)
+	if len(newPushtokens) == 0 {
+		log.Printf("No tokens found. Skipping.")
+		return
 	}
 
+	log.Printf("super duper debuggggggg, %s", newPushtokens[0])
+	_, exist := pm.pushkeysByPubkey[event.PubKey]
 	pm.pushkeysByPubkey[event.PubKey] = newPushtokens
-	log.Printf("  Now has %d pushkeys", len(newPushtokens))
+	count := len(newPushtokens)
+
+	if exist {
+		log.Printf("🔄 Updating pushkeys from existing pubkey %s. count: %d", event.PubKey, count)
+	} else {
+		log.Printf("👤 Received pushkeys from new pubkey %s. Total: %d", event.PubKey, count)
+	}
+	log.Printf("... %s ", newPushtokens)
+
 }
 
 func (fm *FilterManager) GetAllFilters() []nostr.Filter {
 	var allFilters []nostr.Filter
 	for pubkey, filters := range fm.filtersByPubkey {
-		log.Printf("  📋 Pubkey %s has %d active filters", pubkey, len(filters))
+		log.Printf("📋 Pubkey %s has %d active filters", pubkey, len(filters))
 		allFilters = append(allFilters, filters...)
 	}
 	return allFilters
+}
+
+type FilterPubKeyPair struct {
+	filter nostr.Filter
+	pubkey string
+}
+
+func (fm *FilterManager) GetAllFiltersPubKeyPairs() []FilterPubKeyPair {
+	var result []FilterPubKeyPair
+	for pubkey, filters := range fm.filtersByPubkey {
+		for _, f := range filters {
+			result = append(result, FilterPubKeyPair{f, pubkey})
+		}
+	}
+
+	return result
 }
 
 func readStrfryEvents(strfryHost string) ([]nostr.Event, error) {
@@ -136,11 +167,22 @@ func readStrfryEvents(strfryHost string) ([]nostr.Event, error) {
 }
 
 func printEvents(events []nostr.Event) {
-	log.Println("=== Debug: Printing all events ===")
+	log.Println("=== debug: Printing all events ===")
 	for i, event := range events {
 		log.Printf("Event %d: Kind=%d Content=%s", i, event.Kind, event.Content)
 	}
-	log.Println("=== End of events ===")
+	log.Println("=== end of events ===")
+}
+
+func (pm *PushManager) printPushtoken() {
+	log.Println("=== debug: Printing all pushtoken for each pubkey ")
+	for pubkeys, pushkeys := range pm.pushkeysByPubkey {
+		log.Printf("Pubkey: %s has pushkeys ->", pubkeys)
+		for i, f := range pushkeys {
+			log.Printf("   [%d]: %s", i, f)
+		}
+	}
+	log.Println("=== end of events ===")
 }
 
 func sendPushToMany(tokenStrs []Pushtoken) {
@@ -179,11 +221,13 @@ func sendPushToMany(tokenStrs []Pushtoken) {
 	}
 }
 
-func handleMatchedEvent(event nostr.Event, pushToken []Pushtoken) {
-	log.Printf("✅ Matched event %s. Processing. Sending Push to %s et. al.", event.ID, pushToken)
+func handleMatchedEvent(event nostr.Event, pubkey string) {
+
+	pushToken := pm.pushkeysByPubkey[pubkey]
+	log.Printf("✅ Matched event %s. Processing. Sending Push to %s for pubkey %s", event.ID, pushToken, pubkey)
 
 	if pushToken == nil {
-		log.Printf("No pushtoken for publik key found. done.")
+		log.Printf("No pushtoken for public key found. done.")
 		return
 	}
 	log.Printf("number of push tokens for this msg %d", len(pushToken))
@@ -266,10 +310,10 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 		return fmt.Errorf("failed to register a consumer: %v", err)
 	}
 
-	log.Printf("🔍 Loaded filters:")
-	for pubkey, filters := range fm.filtersByPubkey {
-		log.Printf("  Pubkey %s has filters: %+v", pubkey, filters) // add pushtoken
-	}
+	//log.Printf("🔍 Loaded filters:")
+	//for pubkey, filters := range fm.filtersByPubkey {
+	//	log.Printf("Pubkey %s has filters: %+v", pubkey, filters) // add pushtoken
+	//}
 
 	log.Printf("Starting to consume messages from queue: %s with %d filters",
 		queueName,
@@ -302,8 +346,6 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 				continue
 			}
 
-			log.Printf("is for me..")
-
 			decryptedContent, err := decryptContent(event.Content, event.PubKey)
 			if err != nil {
 				log.Printf("Decrytption failed for message: %s", event.ID)
@@ -318,6 +360,9 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 
 			log.Printf("🔄📱 Updating pushkeys")
 			pm.UpdatePushkeys(event)
+
+			pm.printPushtoken()
+			log.Printf("----------------------------------")
 
 			msg.Ack(false)
 			continue
@@ -340,17 +385,22 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 
 		// Check all current filters
 		matches := 0
-		for _, filter := range fm.GetAllFilters() {
-			log.Printf("  🔍 Checking against filter: %+v", filter)
+		//for _, filter := range fm.GetAllFilters() {
+		for filter, pubkey := range fm.GetAllFiltersPubKeyPairs() {
+			log.Printf("🔍 Checking against filter: %+v", filter)
 			if filter.Matches(&event) {
-				log.Printf("  ✅ Filter matched event kind %d", event.Kind)
-				tokens := pm.pushkeysByPubkey[event.PubKey]
-				handleMatchedEvent(event, tokens)
+				log.Printf("✅ Filter matched event kind %d", event.Kind)
+				//tokens := pm.pushkeysByPubkey[event.PubKey]
 				//handleMatchedEvent(event)
+				log.Printf("filter: %v. pubkey: %s, event: %v", filter, pubkey, event)
+				//handleMatchedEvent(event, tokens)
+				//handleMatchedEvent(event)
+
+				handleMatchedEvent(event, pubkey)
 
 				matches++
 			} else {
-				log.Printf("  ❌ Filter did not match event kind %d", event.Kind)
+				log.Printf("❌ Filter did not match event kind %d", event.Kind)
 			}
 		}
 
@@ -379,7 +429,7 @@ func parseFilters(events []nostr.Event) []nostr.Filter {
 		}
 
 		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
-			log.Printf("❌ Failed to parse filter content from event %d: %v", i, err)
+			log.Printf("❌ Failed to parse filter content from event %d: %v. event.content: %s", i, err, event.Content)
 			continue
 		}
 		for _, rawFilter := range content.Filters {
@@ -462,15 +512,15 @@ func isEncryptedAndIsForMe(event nostr.Event) bool {
 	// should be save, no?
 	vals := GetTagValues(event, "p")
 	if len(vals) == 0 {
-		log.Printf("no p tag")
+		log.Printf("⛔ no p tag")
 		return false
 	}
 	if vals[0] != keys.publicKey {
-		log.Printf("first p tag is not for me (was: %s)", vals[0])
+		log.Printf("⛔ first p tag is not for me (was: %s)", vals[0])
 		return false
 	}
 	if !strings.Contains(event.Content, "?iv=") {
-		log.Printf("no iv marker ..")
+		log.Printf("⛔ no iv marker ..")
 		return false
 	}
 	// fuck it, lets not check if both splat parts, iv and chipertet are base64, it will fail just fine during encryption
@@ -480,8 +530,8 @@ func isEncryptedAndIsForMe(event nostr.Event) bool {
 }
 
 func decryptContent(content string, senderPublicKey string) (string, error) {
-	log.Printf("trying to decrypt cotent: %s", content)
-	log.Printf("With Privatekey: %s", keys.privateKey)
+	//log.Printf("trying to decrypt cotent: %s", content)
+	//log.Printf("With Privatekey: %s", keys.privateKey)
 
 	// this we should / clould do, only once for every pk/sk pair, to save time!
 	// but it probbbably just does not matter at the end of the day if we do end up making this 100x slower..
@@ -493,10 +543,9 @@ func decryptContent(content string, senderPublicKey string) (string, error) {
 
 	// plaintext, _ := Decrypt(ciphertext, shared)
 	plain, err := nip04.Decrypt(content, shared)
-	log.Printf("plain: %s, content: %s", plain, content)
+	log.Printf("Decypted as: %s, content: %s", plain, content)
 	if err != nil {
-		log.Printf("TBD!!!")
-		log.Printf("%v", err)
+		log.Printf("Decryption error. %v", err)
 	}
 
 	return plain, nil
@@ -561,7 +610,8 @@ func main() {
 	log.Printf("✅ Loaded initial filters and pushtoken from strfry: %d pubkeys",
 		len(filterManager.filtersByPubkey))
 
-	printEvents(events)
+	//printEvents(events)
+	pushManager.printPushtoken()
 
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
