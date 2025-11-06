@@ -185,7 +185,33 @@ func (pm *PushManager) printPushtoken() {
 	log.Println("=== end of events ===")
 }
 
-func sendPushToMany(tokenStrs []Pushtoken) {
+// ===== Helpers for body truncation and plus code extraction from tags =====
+
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// Tag format: ["#l", "<PLUSCODE>", "open-location-code"]
+func plusCodeFromTags(e nostr.Event) string {
+	for _, tag := range e.Tags {
+		if len(tag) >= 2 && (tag[0] == "#l" || tag[0] == "l") {
+			// Prefer when explicitly marked as open-location-code, but return either way.
+			if len(tag) >= 3 && strings.EqualFold(tag[2], "open-location-code") {
+				return tag[1]
+			}
+			return tag[1]
+		}
+	}
+	return "unknown"
+}
+
+// ========================================================================
+
+func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 	var tokens []*exponent.Token
 	for _, s := range tokenStrs {
 		tokens = append(tokens, exponent.MustParseToken(string(s)))
@@ -194,13 +220,17 @@ func sendPushToMany(tokenStrs []Pushtoken) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	msgs := []*exponent.Message{}
+	// Build title & body from the event itself
+	plusCode := plusCodeFromTags(event)
+	title := fmt.Sprintf("New note in plus code %s", plusCode)
+	body := truncateRunes(event.Content, 80)
 
+	msgs := []*exponent.Message{}
 	for _, tkn := range tokens {
 		msgs = append(msgs, &exponent.Message{
 			To:       []*exponent.Token{tkn},
-			Body:     "Group push",
-			Title:    "Broadcast",
+			Body:     body,
+			Title:    title,
 			Priority: exponent.DefaultPriority,
 		})
 	}
@@ -221,8 +251,8 @@ func sendPushToMany(tokenStrs []Pushtoken) {
 	}
 }
 
-func handleMatchedEvent(pm PushManager, pubkey string) {
 
+func handleMatchedEvent(pm PushManager, pubkey string, event nostr.Event) {
 	pushToken := pm.pushkeysByPubkey[pubkey]
 	log.Printf("✅ Sending Push to %s for pubkey %s", pushToken, pubkey)
 
@@ -232,7 +262,7 @@ func handleMatchedEvent(pm PushManager, pubkey string) {
 	}
 	log.Printf("number of push tokens for this msg %d", len(pushToken))
 
-	sendPushToMany(pushToken)
+	sendPushToMany(pushToken, event)
 
 }
 
@@ -388,7 +418,7 @@ func readRabbitMQ(rabbitURL string, queueName string, fm *FilterManager, pm *Pus
 			log.Printf("🔍 Checking against filter: %+v", pair.filter)
 			if pair.filter.Matches(&event) {
 				log.Printf("✅ Filter matched event kind %d filter: %v. pubkey: %s, event: %v", event.Kind, pair.filter, pair.pubkey, event)
-				handleMatchedEvent(*pm, pair.pubkey)
+				handleMatchedEvent(*pm, pair.pubkey, event)
 				matches++
 			} else {
 				log.Printf("❌ Filter did not match event kind %d", event.Kind)
