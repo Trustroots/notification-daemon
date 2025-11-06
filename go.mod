@@ -1,8 +1,9 @@
 module notifi
 
-go 1.23
+go 1.23.0
 
 require (
+	github.com/9ssi7/exponent v0.0.3
 	github.com/nbd-wtf/go-nostr v0.27.5
 	github.com/rabbitmq/amqp091-go v1.9.0
 )
