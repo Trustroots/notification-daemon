@@ -491,12 +491,15 @@ func parsePushtokens(events []nostr.Event) []Pushtoken {
 			continue
 		}
 		for _, rawPushtoken := range content.Pushtokens {
-			var pushtoken Pushtoken
-			if err := json.Unmarshal(rawPushtoken, &pushtoken); err != nil {
-				log.Printf("❌ Failed to parse individual pushtoken: %v", err)
+			var tokenObj struct {
+				ExpoPushToken string `json:"expoPushToken"`
+			}
+			if err := json.Unmarshal(rawPushtoken, &tokenObj); err != nil {
+				log.Printf("❌ Failed to parse individual pushtoken: %v; raw: %s", err, string(rawPushtoken))
 				continue
 			}
 
+			pushtoken := Pushtoken(tokenObj.ExpoPushToken)
 			log.Printf("📋 Parsed pushtoken from event %d: %+v", i, pushtoken)
 			pushtokens = append(pushtokens, pushtoken)
 		}
