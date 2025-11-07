@@ -455,16 +455,18 @@ func parseFilters(events []nostr.Event) []nostr.Filter {
 		}
 
 		var content struct {
-			Filters []json.RawMessage `json:"filters"`
+			Filters []struct {
+				Filter json.RawMessage `json:"filter"`
+			} `json:"filters"`
 		}
 
 		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
 			log.Printf("❌ Failed to parse filter content from event %d: %v. event.content: %s", i, err, event.Content)
 			continue
 		}
-		for _, rawFilter := range content.Filters {
+		for _, filterObj := range content.Filters {
 			var filter nostr.Filter
-			if err := json.Unmarshal(rawFilter, &filter); err != nil {
+			if err := json.Unmarshal(filterObj.Filter, &filter); err != nil {
 				log.Printf("❌ Failed to parse individual filter: %v", err)
 				continue
 			}
