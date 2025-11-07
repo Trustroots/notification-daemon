@@ -1,0 +1,14 @@
+services:
+  notifi_deno:
+    build: .
+    environment:
+      - STRFRY_URL=wss://relay.trustroots.org
+      - RABBITMQ_URL=amqp://insecure:insecure@172.20.0.1:5672
+      - RABBITMQ_QUEUE=notifications
+      - PRIVATEKEY=${PRIVATEKEY}
+      - EXPOACCESSTOKEN=${EXPOACCESSTOKEN}
+    restart: unless-stopped
+
+networks:
+  nostr_network:
+    external: true
