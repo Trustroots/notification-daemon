@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/9ssi7/exponent"
+	"github.com/joho/godotenv"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip04"
@@ -232,6 +234,14 @@ func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 			Body:     body,
 			Title:    title,
 			Priority: exponent.DefaultPriority,
+			Data: exponent.Data{
+				"id":        event.ID,
+				"kind":      strconv.Itoa(event.Kind),
+				"pubkey":    event.PubKey,
+				"content":   event.Content,
+				"createdAt": strconv.FormatInt(int64(event.CreatedAt), 10),
+				"tags":      fmt.Sprintf("%v", event.Tags),
+			},
 		})
 	}
 
@@ -250,7 +260,6 @@ func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 		}
 	}
 }
-
 
 func handleMatchedEvent(pm PushManager, pubkey string, event nostr.Event) {
 	pushToken := pm.pushkeysByPubkey[pubkey]
@@ -491,12 +500,15 @@ func parsePushtokens(events []nostr.Event) []Pushtoken {
 			continue
 		}
 		for _, rawPushtoken := range content.Pushtokens {
-			var pushtoken Pushtoken
-			if err := json.Unmarshal(rawPushtoken, &pushtoken); err != nil {
-				log.Printf("❌ Failed to parse individual pushtoken: %v", err)
+			var tokenObj struct {
+				ExpoPushToken string `json:"expoPushToken"`
+			}
+			if err := json.Unmarshal(rawPushtoken, &tokenObj); err != nil {
+				log.Printf("❌ Failed to parse individual pushtoken: %v; raw: %s", err, string(rawPushtoken))
 				continue
 			}
 
+			pushtoken := Pushtoken(tokenObj.ExpoPushToken)
 			log.Printf("📋 Parsed pushtoken from event %d: %+v", i, pushtoken)
 			pushtokens = append(pushtokens, pushtoken)
 		}
@@ -604,6 +616,11 @@ func setupKeys(privateKeyEnv string) {
 var keys *KeyMaterial
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("No .env file found or error loading it, proceeding with environment variables.")
+	}
+
 	setupPush(os.Getenv("EXPOACCESSTOKEN"))
 
 	filterManager := NewFilterManager()
