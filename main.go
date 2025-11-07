@@ -605,6 +605,9 @@ var keys *KeyMaterial
 
 func main() {
 	err := godotenv.Load()
+	if err != nil {
+		log.Println("No .env file found or error loading it, proceeding with environment variables.")
+	}
 
 	setupPush(os.Getenv("EXPOACCESSTOKEN"))
 
