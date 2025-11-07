@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/9ssi7/exponent"
+	"github.com/joho/godotenv"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip04"
@@ -250,7 +251,6 @@ func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 		}
 	}
 }
-
 
 func handleMatchedEvent(pm PushManager, pubkey string, event nostr.Event) {
 	pushToken := pm.pushkeysByPubkey[pubkey]
@@ -604,6 +604,8 @@ func setupKeys(privateKeyEnv string) {
 var keys *KeyMaterial
 
 func main() {
+	err := godotenv.Load()
+
 	setupPush(os.Getenv("EXPOACCESSTOKEN"))
 
 	filterManager := NewFilterManager()
