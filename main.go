@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -233,6 +234,14 @@ func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 			Body:     body,
 			Title:    title,
 			Priority: exponent.DefaultPriority,
+			Data: exponent.Data{
+				"id":        event.ID,
+				"kind":      strconv.Itoa(event.Kind),
+				"pubkey":    event.PubKey,
+				"content":   event.Content,
+				"createdAt": strconv.FormatInt(int64(event.CreatedAt), 10),
+				"tags":      fmt.Sprintf("%v", event.Tags),
+			},
 		})
 	}
 
