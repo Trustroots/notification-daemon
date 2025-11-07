@@ -1,8 +1,8 @@
 FROM golang:1.24-rc-alpine
 
 WORKDIR /app
-COPY main.go ./main.go
-COPY go.mod go.sum ./
+COPY go.mod ./
+COPY main.go ./
 
 RUN go mod tidy && go mod download
 
