@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -229,18 +228,19 @@ func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 
 	msgs := []*exponent.Message{}
 	for _, tkn := range tokens {
+		eventJSON, err := json.Marshal(event)
+		if err != nil {
+			log.Printf("Failed to marshal event to JSON: %v", err)
+			continue
+		}
 		msgs = append(msgs, &exponent.Message{
 			To:       []*exponent.Token{tkn},
 			Body:     body,
 			Title:    title,
 			Priority: exponent.DefaultPriority,
 			Data: exponent.Data{
-				"id":        event.ID,
-				"kind":      strconv.Itoa(event.Kind),
-				"pubkey":    event.PubKey,
-				"content":   event.Content,
-				"createdAt": strconv.FormatInt(int64(event.CreatedAt), 10),
-				"tags":      fmt.Sprintf("%v", event.Tags),
+				"type":  "event",
+				"event": string(eventJSON),
 			},
 		})
 	}
