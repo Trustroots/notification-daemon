@@ -239,7 +239,7 @@ func sendPushToMany(tokenStrs []Pushtoken, event nostr.Event) {
 			Title:    title,
 			Priority: exponent.DefaultPriority,
 			Data: exponent.Data{
-				"type":  "event",
+				"type":  "eventJSON",
 				"event": string(eventJSON),
 			},
 		})
