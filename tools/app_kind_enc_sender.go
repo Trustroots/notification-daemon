@@ -16,7 +16,7 @@ func genKeyPair() (privateKey, publicKey string) {
 	privateKey = nostr.GeneratePrivateKey()
 	publicKey, err := nostr.GetPublicKey(privateKey)
 	if err != nil {
-		log.Fatalf("Failed to derive public key form private key. %v", err)
+		log.Fatalf("Failed to derive public key from private key. %v", err)
 	}
 
 	return privateKey, publicKey
@@ -33,17 +33,17 @@ func main() {
 	case "test":
 		_ = flag.NewFlagSet("test", flag.ExitOnError)
 
-		log.Printf("Generating Prive / Public key par for sender")
+		log.Printf("Generating Private / Public key pair for sender")
 		senderPrivateKey, senderPublicKey := genKeyPair()
 		log.Printf("SenderPrivateKey:%s", senderPrivateKey)
-		log.Printf("SenderPubliceKey:%s", senderPublicKey)
+		log.Printf("SenderPublicKey:%s", senderPublicKey)
 
-		log.Printf("Generating Prive / Public key par for reciver")
+		log.Printf("Generating Private / Public key pair for receiver")
 		recieverPrivateKey, recieverPublicKey := genKeyPair()
-		log.Printf("recieverPrivateKey:%s", recieverPrivateKey)
-		log.Printf("recieverPubliceKey:%s", recieverPublicKey)
+		log.Printf("receiverPrivateKey:%s", recieverPrivateKey)
+		log.Printf("receiverPublicKey:%s", recieverPublicKey)
 
-		secretMsg := "this is our verry secret message"
+		secretMsg := "this is our very secret message"
 
 		sharedSecret, err := nip04.ComputeSharedSecret(recieverPublicKey, senderPrivateKey)
 		if err != nil {
@@ -55,11 +55,11 @@ func main() {
 		}
 
 		log.Printf("cipherText:%s", cipherText)
-		log.Println("Trying to decryt")
+		log.Println("Trying to decrypt")
 
 		decrypted, err := nip04.Decrypt(cipherText, sharedSecret)
 		if err != nil {
-			log.Printf("DEcryption failed. %v", err)
+			log.Printf("Decryption failed. %v", err)
 		}
 
 		log.Printf("decrypted: %s", decrypted)
